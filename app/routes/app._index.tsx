@@ -752,7 +752,7 @@ export default function Index() {
         };
       })
 
-    if (readyCollections.length === 0) 
+    if (readyCollections.length === 0){
       return;
     }
 

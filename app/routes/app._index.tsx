@@ -15,11 +15,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                     id
                     title
                     handle
-                    handle
                     descriptionHtml
                     sortOrder
                     templateSuffix
-                    productsCount{
+                    productsCount(first: 250) {
                         count
                     }
                 }

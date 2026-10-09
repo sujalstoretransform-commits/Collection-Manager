@@ -39,7 +39,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const result = await response.json()
 
-  return result.data.collections.nodes;
+  if (result.errors?.length) {
+    console.error(
+      "Collections GraphQL errors:",
+      JSON.stringify(result.errors, null, 2),
+    );
+    throw new Response("Failed to load collections from Shopify.", {
+      status: 500,
+    });
+  }
+
+  return result.data?.collections?.nodes ?? [];
 };
 
 const parseCsv = (text: string) => {
@@ -751,7 +761,7 @@ export default function Index() {
         };
       })
 
-    if (readyCollections.length === 0){
+    if (readyCollections.length === 0) {
       return;
     }
 

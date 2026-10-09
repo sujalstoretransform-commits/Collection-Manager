@@ -75,6 +75,20 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
         const body = await request.json()
 
+        console.log(
+            "IMPORT CONDITIONS:",
+            JSON.stringify(
+                body.collections?.map((c: any) => ({
+                    handle: c.handle,
+                    type: c.type,
+                    matchType: c.matchType,
+                    conditions: c.conditions,
+                })),
+                null,
+                2
+            )
+        );
+
         if (!Array.isArray(body.collections)) {
             return Response.json(
                 { error: "collections must be an array" },

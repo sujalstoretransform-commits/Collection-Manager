@@ -360,7 +360,7 @@ const validSortOrders = [
 
 const validMatchTypes = ["ALL", "ANY"];
 
-const  downloadFile= (
+const downloadFile = (
   content: string,
   filename: string,
   type: string,
@@ -712,8 +712,47 @@ export default function Index() {
       const result = validateCollection(collection, importData)
       return result.status === "Ready"
     })
+      .map((collection: any) => {
+        if (
+          typeof collection.conditions !== "string" ||
+          collection.type?.toLowerCase() !== "smart"
+        ) {
+          return collection;
+        }
 
-    if (readyCollections.length === 0) {
+        const conditions = collection.conditions
+          .split(";")
+          .filter(Boolean)
+          .map((condition: string) => {
+            const parsed: Record<string, string> = {};
+
+            condition.split("|").forEach((part) => {
+              const [key, ...rest] = part.split("=");
+
+              if (key && rest.length > 0) {
+                parsed[key.trim()] = rest.join("=").trim();
+              }
+            });
+
+            return {
+              field: parsed.field,
+              relation: parsed.relation,
+              matchType: parsed.matchType,
+              values: parsed.values
+                ? parsed.values.split("^").map((value) => value.trim()).filter(Boolean)
+                : [],
+              amount: parsed.amount,
+              currencyCode: parsed.currencyCode,
+            };
+          })
+
+        return {
+          ...collection,
+          conditions,
+        };
+      })
+
+    if (readyCollections.length === 0) 
       return;
     }
 

@@ -34,6 +34,22 @@ const PRODUCTS_BY_HANDLES_QUERY = `#graphql
   }
 `;
 
+
+const COLLECTION_ADD_PRODUCTS_MUTATION = `#graphql
+  mutation CollectionAddProducts($id: ID!, $productIds: [ID!]!) {
+    collectionAddProducts(id: $id, productIds: $productIds) {
+      collection {
+        id
+        title
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 const buildSmartConditions = (conditions: any[]) => {
     return conditions.map((rule) => {
         const field = String(rule.column ?? rule.field ?? "").toUpperCase()
@@ -178,19 +194,6 @@ export async function action({ request }: ActionFunctionArgs) {
                 collectionInput.templateSuffix = collection.templateSuffix;
             }
 
-            if (isManual && productIds.length > 0) {
-                collectionInput.sources = [
-                    {
-                        source: {
-                            title: "Imported manual products",
-                            inclusion: {
-                                selections: productIds.map((productId) => ({ productId }))
-                            }
-                        }
-                    }
-                ]
-            }
-
             if (!isManual && Array.isArray(collection.conditions)) {
                 collectionInput.sources = [
                     {
@@ -236,6 +239,42 @@ export async function action({ request }: ActionFunctionArgs) {
 
             const createdCollection = result.data.collectionCreate.collection
             console.log("CREATED COLLECTION:", createdCollection);
+
+            if (isManual && productIds.length > 0) {
+                const addProductsResponse = await admin.graphql(
+                    COLLECTION_ADD_PRODUCTS_MUTATION,
+                    {
+                        variables: {
+                            id: createdCollection.id,
+                            productIds,
+                        },
+                    }
+                );
+
+                const addProductsResult = await addProductsResponse.json();
+
+                if (addProductsResult.errors?.length) {
+                    results.push({
+                        handle: collection.handle,
+                        status: "failed",
+                        errors: addProductsResult.errors,
+                    });
+                    continue;
+                }
+
+                const addProductsUserErrors =
+                    addProductsResult.data?.collectionAddProducts?.userErrors ?? [];
+
+                if (addProductsUserErrors.length > 0) {
+                    results.push({
+                        handle: collection.handle,
+                        status: "failed",
+                        errors: addProductsUserErrors,
+                    });
+                    continue;
+                }
+
+            }
 
             results.push({
                 handle: collection.handle,

@@ -110,7 +110,7 @@ export async function action({ request }: ActionFunctionArgs) {
         ? collectionData.ruleSet.rules.map((rule: any) => ({
             field: rule.column,
             relation: rule.relation,
-            value: rule.condition,
+            values: [String(rule.condition)],
           }))
         : [],
 

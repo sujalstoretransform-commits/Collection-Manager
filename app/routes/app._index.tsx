@@ -43,7 +43,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return result.data.collections.nodes;
 };
 
-function parseCsv(text: string) {
+const parseCsv = (text: string) => {
   const rows: string[][] = [];
   let row: string[] = [];
   let value = "";
@@ -127,7 +127,7 @@ function parseCsv(text: string) {
   });
 }
 
-function validateConditions(collection: any) {
+const validateConditions = (collection: any) => {
   if (collection.type?.trim().toLowerCase() !== "smart") {
     return null;
   }
@@ -196,10 +196,10 @@ function validateConditions(collection: any) {
   const validFields = ["tag", "title", "type", "vendor", "price"];
 
   for (const condition of conditions) {
-    if (!validFields.includes(condition.field)) {
+    if (!validFields.includes(String(condition.field).toLowerCase())) {
       return {
         status: "Error",
-        reason: `Unsupported condition field: ${condition.field}`,
+        reason: `Front Unsupported condition field: ${condition.field}`,
       };
     }
 
@@ -248,7 +248,7 @@ function validateConditions(collection: any) {
   return null;
 }
 
-function validateCollection(collection: any, allCollections: any[]) {
+const validateCollection = (collection: any, allCollections: any[]) => {
   if (collection.alreadyExists) {
     return {
       status: "Skipped",
@@ -360,11 +360,11 @@ const validSortOrders = [
 
 const validMatchTypes = ["ALL", "ANY"];
 
-function downloadFile(
+const  downloadFile= (
   content: string,
   filename: string,
   type: string,
-) {
+) => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob)
 
@@ -376,13 +376,13 @@ function downloadFile(
   URL.revokeObjectURL(url);
 }
 
-function csvEscape(value: unknown) {
+const csvEscape = (value: unknown) => {
   const text = value == null ? "" : String(value);
 
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function buildCsv(data: any) {
+const buildCsv = (data: any) => {
   const headers = [
     "handle",
     "title",
@@ -433,7 +433,7 @@ function buildCsv(data: any) {
   ].join("\r\n");
 }
 
-function buildSampleCsv() {
+const buildSampleCsv = () => {
   const headers = [
     "handle",
     "title",
@@ -477,35 +477,6 @@ function buildSampleCsv() {
     headers.map(csvEscape).join(","),
     ...rows,
   ].join("\r\n");
-}
-
-function buildExportCollection(collection: any) {
-  const isSmart = !!collection.ruleSet;
-
-  return {
-    handle: collection.handle,
-    title: collection.title,
-    descriptionHtml: collection.descriptionHtml ?? "",
-    sortOrder: collection.sortOrder,
-    templateSuffix: collection.templateSuffix,
-    type: isSmart ? "smart" : "manual",
-
-    matchType: isSmart
-      ? collection.ruleSet.appliedDisjunctively
-        ? "ANY"
-        : "ALL"
-      : null,
-
-    conditions: isSmart
-      ? collection.ruleSet.rules.map((rule: any) => ({
-        field: rule.column,
-        relation: rule.relation,
-        value: rule.condition,
-      }))
-      : [],
-
-    productHandles: [],
-  }
 }
 
 const sampleImportData = {

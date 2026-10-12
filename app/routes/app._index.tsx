@@ -1,4 +1,4 @@
-import { HeadersFunction, LoaderFunctionArgs, useRevalidator } from "react-router";
+import { HeadersFunction, LoaderFunctionArgs, useRevalidator, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useEffect, useState, useRef } from "react";
@@ -6,11 +6,14 @@ import { useLoaderData } from "react-router";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
+  const url = new URL(request.url);
+  const after = url.searchParams.get("after");
+  const before = url.searchParams.get("before");
 
   const response = await admin.graphql(
     `#graphql
-        query Collections($first: Int!, $after: String) {
-            collections(first: $first, after: $after) {
+        query Collections($first: Int, $after: String, $last: Int, $before: String) {
+            collections(first: $first, after: $after, last: $last, before: $before) {
                 nodes {
                     id
                     title
@@ -24,15 +27,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                 }
                 pageInfo {
                     hasNextPage
-                    endCursor 
+                    hasPreviousPage
+                    startCursor
+                    endCursor
                 }
             }
         }
     `,
     {
       variables: {
-        first: 50,
-        after: null,
+        first: before ? null : 50,
+        after,
+        last: before ? 50 : null,
+        before,
       },
     }
   )
@@ -49,7 +56,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  return result.data?.collections?.nodes ?? [];
+  const collectionPage = result.data?.collections;
+  return {
+    collections: collectionPage?.nodes ?? [],
+    pageInfo: collectionPage?.pageInfo ?? {
+      hasNextPage: false,
+      hasPreviousPage: false,
+      startCursor: null,
+      endCursor: null,
+    },
+  };
 };
 
 const parseCsv = (text: string) => {
@@ -524,7 +540,8 @@ export default function Index() {
   const [file, setFile] = useState<globalThis.File | null>(null)
   const [fileError, setFileError] = useState<string | null>(null);
   const [importData, setImportData] = useState<any[]>([]);
-  const collections = useLoaderData<typeof loader>()
+  const { collections, pageInfo } = useLoaderData<typeof loader>()
+  const [searchParams, setSearchParams] = useSearchParams();
   const revalidator = useRevalidator();
   const [isImporting, setIsImporting] = useState(false)
   const shouldRecheckFile = useRef(false);
@@ -532,7 +549,9 @@ export default function Index() {
 
 
 
-  const allSelected = selectedIds.length === collections.length;
+  const allSelected =
+    collections.length > 0 &&
+    collections.every((collection: any) => selectedIds.includes(collection.id));
 
   const validationResults = importData.map((collection, index) => {
     const validation = validateCollection(collection, importData)
@@ -555,14 +574,34 @@ export default function Index() {
 
   const toggleSelectAll = () => {
     if (allSelected) {
-      setSelectedIds([]);
+      const currentPageIds = new Set(
+        collections.map((collection: any) => collection.id),
+      );
+      setSelectedIds(selectedIds.filter((id) => !currentPageIds.has(id)));
     } else {
-      setSelectedIds(collections.map((collection: any) => collection.id));
+      setSelectedIds((currentIds) => Array.from(new Set([
+        ...currentIds,
+        ...collections.map((collection: any) => collection.id),
+      ])));
     }
   }
 
   const clearSelected = () => {
     setSelectedIds([]);
+  }
+
+  const goToCollectionPage = (direction: "next" | "previous") => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("after");
+    nextParams.delete("before");
+
+    if (direction === "next" && pageInfo.endCursor) {
+      nextParams.set("after", pageInfo.endCursor);
+    } else if (direction === "previous" && pageInfo.startCursor) {
+      nextParams.set("before", pageInfo.startCursor);
+    }
+
+    setSearchParams(nextParams);
   }
 
   const checkFileFun = async () => {
@@ -887,7 +926,7 @@ export default function Index() {
                 <s-button
                   onClick={toggleSelectAll}
                 >
-                  {allSelected ? "Clear All" : "Select All"}
+                  {allSelected ? "Clear Page" : "Select Page"}
                 </s-button>
                 <s-button
                   onClick={clearSelected}
@@ -921,6 +960,21 @@ export default function Index() {
                   ))}
                 </s-table-body>
               </s-table>
+              <s-stack direction="inline" gap="base" alignItems="center">
+                <s-button
+                  disabled={!pageInfo.hasPreviousPage}
+                  onClick={() => goToCollectionPage("previous")}
+                >
+                  Previous 50
+                </s-button>
+                <s-text>Showing {collections.length} collections on this page</s-text>
+                <s-button
+                  disabled={!pageInfo.hasNextPage}
+                  onClick={() => goToCollectionPage("next")}
+                >
+                  Next 50
+                </s-button>
+              </s-stack>
             </s-stack>
           </s-section>
         </s-box>

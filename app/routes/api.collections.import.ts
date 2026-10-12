@@ -119,16 +119,19 @@ export async function action({ request }: ActionFunctionArgs) {
             let productIds: string[] = [];
             const isManual = String(collection.type).toLowerCase() === "manual"
 
-            if (
-                isManual &&
-                Array.isArray(collection.productHandles) &&
-                collection.productHandles.length > 0
-            ) {
-                const productHandles = collection.productHandles
-                    .map((handle: string) => handle.trim())
-                    .filter(Boolean);
+            const productHandles = Array.isArray(collection.productHandles)
+                ? collection.productHandles
+                : typeof collection.productHandles === "string"
+                    ? collection.productHandles.split("|")
+                    : [];
 
-                const productQuery = productHandles
+            const normalizedProductHandles = productHandles
+                .map((handle: string) => handle.trim())
+                .filter(Boolean);
+
+            if (isManual && normalizedProductHandles.length > 0) {
+
+                const productQuery = normalizedProductHandles
                     .map((handle: string) => `handle:${handle}`)
                     .join(" OR ");
 
@@ -160,7 +163,7 @@ export async function action({ request }: ActionFunctionArgs) {
                     products.map((product: { handle: string }) => product.handle.toLowerCase())
                 )
 
-                const missingHandles = productHandles.filter((handle: string) => !foundHanldes.has(handle.toLowerCase()))
+                const missingHandles = normalizedProductHandles.filter((handle: string) => !foundHanldes.has(handle.toLowerCase()))
 
                 if (missingHandles.length > 0) {
                     results.push({
@@ -252,6 +255,12 @@ export async function action({ request }: ActionFunctionArgs) {
                 );
 
                 const addProductsResult = await addProductsResponse.json();
+
+                console.log(
+                    "ADD PRODUCTS RESULT:",
+                    JSON.stringify(addProductsResult, null, 2),
+                );
+                console.log("PRODUCT IDS:", productIds);
 
                 if (addProductsResult.errors?.length) {
                     results.push({

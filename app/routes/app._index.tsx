@@ -908,14 +908,13 @@ export default function Index() {
                 <s-table-body>
                   {collections.map((collection: any, index: any) => (
                     <s-table-row key={collection.id}>
-                      <s-table-cell>{index + 1}</s-table-cell>
                       <s-table-cell>
                         <s-checkbox
                           checked={selectedIds.includes(collection.id)}
                           onChange={() => toggleCollection(collection.id)}
-                          label={collection.title}
                         />
                       </s-table-cell>
+                      <s-table-cell>{index + 1}</s-table-cell>
                       <s-table-cell>{collection.title}</s-table-cell>
                       <s-table-cell>{collection.handle}</s-table-cell>
                       <s-table-cell>{collection.type}</s-table-cell>

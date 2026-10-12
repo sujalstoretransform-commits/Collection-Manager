@@ -898,7 +898,6 @@ export default function Index() {
               </s-stack>
               <s-table>
                 <s-table-header-row>
-                  <s-table-header>No</s-table-header>
                   <s-table-header>Select</s-table-header>
                   <s-table-header>Title</s-table-header>
                   <s-table-header>Handle</s-table-header>
@@ -909,12 +908,12 @@ export default function Index() {
                   {collections.map((collection: any, index: any) => (
                     <s-table-row key={collection.id}>
                       <s-table-cell>
+                        <s-table-cell>{index + 1}</s-table-cell>
                         <s-checkbox
                           checked={selectedIds.includes(collection.id)}
                           onChange={() => toggleCollection(collection.id)}
                         />
                       </s-table-cell>
-                      <s-table-cell>{index + 1}</s-table-cell>
                       <s-table-cell>{collection.title}</s-table-cell>
                       <s-table-cell>{collection.handle}</s-table-cell>
                       <s-table-cell>{collection.type}</s-table-cell>

@@ -26,7 +26,7 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://collection-manager-ccqi.onrender.com/auth/callback" ]
+redirect_urls = [ "https://collection-manager-updn.onrender.com/auth/callback" ]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"

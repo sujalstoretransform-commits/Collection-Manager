@@ -542,12 +542,14 @@ export default function Index() {
   const [importData, setImportData] = useState<any[]>([]);
   const { collections, pageInfo } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams();
+  const currentPage = Math.max(
+    1,
+    Number.parseInt(searchParams.get("page") ?? "1", 10) || 1,
+  );
   const revalidator = useRevalidator();
   const [isImporting, setIsImporting] = useState(false)
   const shouldRecheckFile = useRef(false);
   const sawRevalidation = useRef(false);
-
-
 
   const allSelected =
     collections.length > 0 &&
@@ -597,8 +599,10 @@ export default function Index() {
 
     if (direction === "next" && pageInfo.endCursor) {
       nextParams.set("after", pageInfo.endCursor);
+      nextParams.set("page", String(currentPage + 1));
     } else if (direction === "previous" && pageInfo.startCursor) {
       nextParams.set("before", pageInfo.startCursor);
+      nextParams.set("page", String(Math.max(1, currentPage - 1)));
     }
 
     setSearchParams(nextParams);
@@ -962,17 +966,28 @@ export default function Index() {
               </s-table>
               <s-stack direction="inline" gap="base" alignItems="center">
                 <s-button
+                  variant="secondary"
                   disabled={!pageInfo.hasPreviousPage}
                   onClick={() => goToCollectionPage("previous")}
+                  aria-label="Previous page"
                 >
-                  Previous 50
+                  ‹
                 </s-button>
                 <s-button
+                  variant="secondary"
                   disabled={!pageInfo.hasNextPage}
                   onClick={() => goToCollectionPage("next")}
+                  aria-label="Next page"
                 >
-                  Next 50
+                  ›
                 </s-button>
+                <s-text>
+                  {
+                    collections.length === 0
+                      ? "0"
+                      : `${(currentPage - 1) * 50 + 1}-${(currentPage - 1) * 50 + collections.length}`
+                  }
+                </s-text>
               </s-stack>
             </s-stack>
           </s-section>

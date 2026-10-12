@@ -1,7 +1,7 @@
 import { HeadersFunction, LoaderFunctionArgs, useRevalidator } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLoaderData } from "react-router";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -205,7 +205,9 @@ const validateConditions = (collection: any) => {
   const validFields = ["tag", "title", "type", "vendor", "price"];
 
   for (const condition of conditions) {
-    if (!validFields.includes(String(condition.field).toLowerCase())) {
+    const field = String(condition.field ?? "").trim().toLowerCase();
+
+    if (!validFields.includes(field)) {
       return {
         status: "Error",
         reason: `Front Unsupported condition field: ${condition.field}`,
@@ -219,7 +221,7 @@ const validateConditions = (collection: any) => {
       };
     }
 
-    if (condition.field === "price") {
+    if (field === "price") {
       if (!condition.amount) {
         return {
           status: "Error",
@@ -258,6 +260,8 @@ const validateConditions = (collection: any) => {
 }
 
 const validateCollection = (collection: any, allCollections: any[]) => {
+  const collectionType = String(collection.type ?? "").trim().toLowerCase();
+
   if (collection.alreadyExists) {
     return {
       status: "Skipped",
@@ -279,21 +283,21 @@ const validateCollection = (collection: any, allCollections: any[]) => {
     };
   }
 
-  if (!["smart", "manual"].includes(collection.type)) {
+  if (!["smart", "manual"].includes(collectionType)) {
     return {
       status: "Error",
       reason: "Type must be smart or manual",
     };
   }
 
-  if (!validSortOrders.includes(collection.sortOrder?.trim())) {
+  if (!validSortOrders.includes(String(collection.sortOrder ?? "").trim().toUpperCase())) {
     return {
       status: "Error",
       reason: "Invalid sort order",
     };
   }
 
-  if (collection.type?.trim().toLowerCase() === "smart" && !validMatchTypes.includes(collection.matchType?.trim().toUpperCase())) {
+  if (collectionType === "smart" && !validMatchTypes.includes(collection.matchType?.trim().toUpperCase())) {
     return {
       status: "Error",
       reason: "Smart collections require matchType ALL or ANY",
@@ -305,33 +309,12 @@ const validateCollection = (collection: any, allCollections: any[]) => {
     return conditionError
   }
 
-  if (collection.type?.trim().toLowerCase() === "manual") {
-    if (Array.isArray(collection.productHandles)) {
-      if (collection.productHandles.length === 0) {
-        return {
-          status: "Error",
-          reason: "Manual collection requires product handles",
-        };
-      }
-    }
-    else if (
-      Array.isArray(collection.missingProductHandles) &&
-      collection.missingProductHandles.length > 0
+  if (collectionType === "manual") {
+    if (
+      collection.productHandles != null &&
+      !Array.isArray(collection.productHandles) &&
+      typeof collection.productHandles !== "string"
     ) {
-      return {
-        status: "Error",
-        reason: `Missing products: ${collection.missingProductHandles.join(", ")}`,
-      };
-    }
-    else if (typeof collection.productHandles === "string") {
-      if (collection.productHandles.trim() === "") {
-        return {
-          status: "Error",
-          reason: "Manual collection requires product handles",
-        };
-      }
-    }
-    else {
       return {
         status: "Error",
         reason: "Invalid productHandles format",
@@ -350,9 +333,15 @@ const validateCollection = (collection: any, allCollections: any[]) => {
     };
   }
 
+  const missingProductHandles = Array.isArray(collection.missingProductHandles)
+    ? collection.missingProductHandles
+    : [];
+
   return {
     status: "Ready",
-    reason: "-",
+    reason: missingProductHandles.length > 0
+      ? `Missing products will be skipped: ${missingProductHandles.join(", ")}`
+      : "-",
   };
 }
 
@@ -361,6 +350,7 @@ const validSortOrders = [
   "ALPHA_DESC",
   "BEST_SELLING",
   "CREATED",
+  "CREATED_DESC",
   "PRICE_ASC",
   "PRICE_DESC",
   "MANUAL",
@@ -536,6 +526,11 @@ export default function Index() {
   const [importData, setImportData] = useState<any[]>([]);
   const collections = useLoaderData<typeof loader>()
   const revalidator = useRevalidator();
+  const [isImporting, setIsImporting] = useState(false)
+  const shouldRecheckFile = useRef(false);
+  const sawRevalidation = useRef(false);
+
+
 
   const allSelected = selectedIds.length === collections.length;
 
@@ -618,7 +613,7 @@ export default function Index() {
 
       const manualCollections = collections.filter(
         (collection: any) =>
-          String(collection.type).toLowerCase() === "manual"
+          String(collection.type).trim().toLowerCase() === "manual"
       );
 
       const allProductHandles = Array.from(
@@ -716,6 +711,22 @@ export default function Index() {
     }
   }
 
+  useEffect(() => {
+    if (!shouldRecheckFile.current) return;
+
+    if (revalidator.state !== "idle") {
+      sawRevalidation.current = true
+      return
+    }
+
+    if (!sawRevalidation.current) return;
+
+    shouldRecheckFile.current = false
+    sawRevalidation.current = false
+    void checkFileFun()
+
+  }, [revalidator.state, checkFileFun])
+
   const importCollections = async () => {
     const readyCollections = importData.filter((collection: any) => {
       const result = validateCollection(collection, importData)
@@ -724,7 +735,7 @@ export default function Index() {
       .map((collection: any) => {
         if (
           typeof collection.conditions !== "string" ||
-          collection.type?.toLowerCase() !== "smart"
+          String(collection.type ?? "").trim().toLowerCase() !== "smart"
         ) {
           return collection;
         }
@@ -765,6 +776,8 @@ export default function Index() {
       return;
     }
 
+    setIsImporting(true)
+
     try {
       setFileError(null)
 
@@ -787,6 +800,8 @@ export default function Index() {
       }
 
       console.log("Import result:", result);
+      shouldRecheckFile.current = true;
+      sawRevalidation.current = false
       revalidator.revalidate()
 
     } catch (error) {
@@ -795,6 +810,8 @@ export default function Index() {
           ? error.message
           : "Failed to import collections."
       );
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -839,164 +856,173 @@ export default function Index() {
 
   return (
     <s-page heading="Collection Export & Import">
-      <s-section heading="Export Collections">
-        <s-stack gap="small-100 large-100">
-          <s-stack direction="inline" gap="large" align-items="center">
-            <s-text>
-              {selectedIds.length} collections selected
-            </s-text>
-            <s-button
-              variant="primary"
-              disabled={selectedIds.length === 0}
-              onClick={downloadExport}
-            >
-              Download export file
-            </s-button>
-            <s-select
-              label="Export Format"
-              value={format}
-              onChange={(e: Event) => {
-                const target = e.target as HTMLSelectElement;
-                setFormat(target.value as "csv" | "json");
-              }}
-            >
-              <s-option value="csv">CSV</s-option>
-              <s-option value="json">JSON</s-option>
-            </s-select>
-          </s-stack>
-          <s-stack direction="inline" gap="small-100 large-100" alignItems="center">
-            <s-button
-              onClick={toggleSelectAll}
-            >
-              {allSelected ? "Clear All" : "Select All"}
-            </s-button>
-            <s-button
-              onClick={clearSelected}
-              disabled={selectedIds.length === 0}
-            >
-              Clear Selected
-            </s-button>
-          </s-stack>
-          <s-table>
-            <s-table-header-row>
-              <s-table-header>Select</s-table-header>
-              <s-table-header>Title</s-table-header>
-              <s-table-header>Handle</s-table-header>
-              <s-table-header>Type</s-table-header>
-              <s-table-header>Products</s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {collections.map((collection: any) => (
-                <s-table-row key={collection.id}>
-                  <s-table-cell>
-                    <s-checkbox
-                      checked={selectedIds.includes(collection.id)}
-                      onChange={() => toggleCollection(collection.id)}
-                      label={collection.title}
-                    />
-                  </s-table-cell>
-                  <s-table-cell>{collection.title}</s-table-cell>
-                  <s-table-cell>{collection.handle}</s-table-cell>
-                  <s-table-cell>{collection.type}</s-table-cell>
-                  <s-table-cell>{collection.productsCount.count}</s-table-cell>
-                </s-table-row>
-              ))}
-            </s-table-body>
-          </s-table>
-        </s-stack>
-      </s-section>
-      <s-section heading="Import Collections">
-        <s-stack gap="small-100 large-100">
-          <s-text>Import collections from a CSV or JSON file.</s-text>
-          <s-stack direction="inline" gap="large" alignItems="center">
-            <s-button
-              onClick={() => {
-                downloadFile(
-                  buildSampleCsv(),
-                  "collections-import-sample.csv",
-                  "text/csv;charset=utf-8",
-                )
-              }}
-            >
-              Download Sample CSV</s-button>
-            <s-button
-              onClick={() => {
-                downloadFile(
-                  JSON.stringify(sampleImportData, null, 2),
-                  "collections-import-sample.json",
-                  "application/json",
-                )
-              }}
-            >
-              Download Sample JSON</s-button>
-          </s-stack>
-          <s-section>
+      <s-stack gap="base">
+        <s-box padding="base" background="subdued" border="base" borderRadius="base">
+          <s-section heading="Export Collections">
             <s-stack gap="small-100 large-100">
-              <s-text>Select a CSV or JSON file to import.</s-text>
-              <s-stack direction="inline" gap="small-100 large-100" alignItems="center">
-                <input
-                  type="file"
-                  id="import-file"
-                  accept=".csv,.json"
-                  hidden
-                  onChange={(e) => {
-                    setFile(e.target.files?.[0] ?? null);
-                  }}
-                />
+              <s-stack direction="inline" gap="large" alignItems="center">
+                <s-text>
+                  {selectedIds.length} collections selected
+                </s-text>
                 <s-button
-                  onClick={() => document.getElementById("import-file")?.click()}
+                  variant="primary"
+                  disabled={selectedIds.length === 0}
+                  onClick={downloadExport}
                 >
-                  Choose File
+                  Download export file
                 </s-button>
-                <s-text> {file ? file.name : "No file selected"} </s-text>
+                <s-select
+                  label="Export Format"
+                  value={format}
+                  onChange={(e: Event) => {
+                    const target = e.target as HTMLSelectElement;
+                    setFormat(target.value as "csv" | "json");
+                  }}
+                >
+                  <s-option value="csv">CSV</s-option>
+                  <s-option value="json">JSON</s-option>
+                </s-select>
               </s-stack>
-            </s-stack>
-          </s-section>
-          <s-button
-            variant="primary"
-            disabled={!file}
-            onClick={checkFileFun}
-          >
-            Check File
-          </s-button>
-          <s-text>
-            {
-              fileError && (
-                <s-text tone="critical">{fileError}</s-text>
-              )
-            }
-          </s-text>
-          <s-section heading="Validation Results">
-            <s-stack gap="small-100 large-100">
+              <s-stack direction="inline" gap="small-100 large-100" alignItems="center">
+                <s-button
+                  onClick={toggleSelectAll}
+                >
+                  {allSelected ? "Clear All" : "Select All"}
+                </s-button>
+                <s-button
+                  onClick={clearSelected}
+                  disabled={selectedIds.length === 0}
+                >
+                  Clear Selected
+                </s-button>
+              </s-stack>
               <s-table>
                 <s-table-header-row>
-                  <s-table-header>Collection</s-table-header>
-                  <s-table-header>Status</s-table-header>
-                  <s-table-header>Reason</s-table-header>
+                  <s-table-header>Select</s-table-header>
+                  <s-table-header>Title</s-table-header>
+                  <s-table-header>Handle</s-table-header>
+                  <s-table-header>Type</s-table-header>
+                  <s-table-header>Products</s-table-header>
                 </s-table-header-row>
-
                 <s-table-body>
-                  {validationResults.map((result) => (
-                    <s-table-row key={result.id}>
-                      <s-table-cell>{result.collection}</s-table-cell>
-                      <s-table-cell>{result.status}</s-table-cell>
-                      <s-table-cell>{result.reason}</s-table-cell>
+                  {collections.map((collection: any) => (
+                    <s-table-row key={collection.id}>
+                      <s-table-cell>
+                        <s-checkbox
+                          checked={selectedIds.includes(collection.id)}
+                          onChange={() => toggleCollection(collection.id)}
+                          label={collection.title}
+                        />
+                      </s-table-cell>
+                      <s-table-cell>{collection.title}</s-table-cell>
+                      <s-table-cell>{collection.handle}</s-table-cell>
+                      <s-table-cell>{collection.type}</s-table-cell>
+                      <s-table-cell>{collection.productsCount.count}</s-table-cell>
                     </s-table-row>
                   ))}
                 </s-table-body>
               </s-table>
-
-              <s-button
-                variant="primary"
-                disabled={readyImportCount === 0}
-                onClick={importCollections}
-              >
-                Import {readyImportCount} Collections
-              </s-button>
             </s-stack>
           </s-section>
-        </s-stack>
-      </s-section>
+        </s-box>
+        <s-box padding="base" background="subdued" border="base" borderRadius="base">
+          <s-section heading="Import Collections">
+            <s-stack gap="small-100 large-100">
+              <s-text>Import collections from a CSV or JSON file.</s-text>
+              <s-stack direction="inline" gap="large" alignItems="center">
+                <s-button
+                  onClick={() => {
+                    downloadFile(
+                      buildSampleCsv(),
+                      "collections-import-sample.csv",
+                      "text/csv;charset=utf-8",
+                    )
+                  }}
+                >
+                  Download Sample CSV</s-button>
+                <s-button
+                  onClick={() => {
+                    downloadFile(
+                      JSON.stringify(sampleImportData, null, 2),
+                      "collections-import-sample.json",
+                      "application/json",
+                    )
+                  }}
+                >
+                  Download Sample JSON</s-button>
+              </s-stack>
+              <s-section>
+                <s-stack gap="small-100 large-100">
+                  <s-text>Select a CSV or JSON file to import.</s-text>
+                  <s-stack direction="inline" gap="small-100 large-100" alignItems="center">
+                    <input
+                      type="file"
+                      id="import-file"
+                      accept=".csv,.json"
+                      hidden
+                      onChange={(e) => {
+                        setFile(e.target.files?.[0] ?? null);
+                      }}
+                    />
+                    <s-button
+                      onClick={() => document.getElementById("import-file")?.click()}
+                    >
+                      Choose File
+                    </s-button>
+                    <s-text> {file ? file.name : "No file selected"} </s-text>
+                  </s-stack>
+                </s-stack>
+              </s-section>
+              <s-button
+                variant="primary"
+                disabled={!file}
+                onClick={checkFileFun}
+              >
+                Check File
+              </s-button>
+              <s-text>
+                {
+                  fileError && (
+                    <s-text tone="critical">{fileError}</s-text>
+                  )
+                }
+              </s-text>
+              <s-section heading="Validation Results">
+                <s-stack gap="small-100 large-100">
+                  <s-table>
+                    <s-table-header-row>
+                      <s-table-header>Collection</s-table-header>
+                      <s-table-header>Status</s-table-header>
+                      <s-table-header>Reason</s-table-header>
+                    </s-table-header-row>
+
+                    <s-table-body>
+                      {validationResults.map((result) => (
+                        <s-table-row key={result.id}>
+                          <s-table-cell>{result.collection}</s-table-cell>
+                          <s-table-cell>{result.status}</s-table-cell>
+                          <s-table-cell>{result.reason}</s-table-cell>
+                        </s-table-row>
+                      ))}
+                    </s-table-body>
+                  </s-table>
+
+                  <s-button
+                    variant="primary"
+                    loading={isImporting}
+                    disabled={readyImportCount === 0}
+                    onClick={importCollections}
+                  >
+                    {isImporting
+                      ? "Importing collections"
+                      : `Import ${readyImportCount} Collections`}
+                  </s-button>
+                </s-stack>
+              </s-section>
+            </s-stack>
+          </s-section>
+        </s-box>
+      </s-stack>
     </s-page>
   );
 }

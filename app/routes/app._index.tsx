@@ -965,13 +965,13 @@ export default function Index() {
                   disabled={!pageInfo.hasPreviousPage}
                   onClick={() => goToCollectionPage("previous")}
                 >
-                  Previous {collections.length}
+                  Previous 50
                 </s-button>
                 <s-button
                   disabled={!pageInfo.hasNextPage}
                   onClick={() => goToCollectionPage("next")}
                 >
-                  Next {collections.length}
+                  Next 50
                 </s-button>
               </s-stack>
             </s-stack>

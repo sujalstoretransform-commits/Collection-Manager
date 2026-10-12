@@ -2,7 +2,7 @@
 
 client_id = "bd8ac2623ccabc785a400e4dc1459f2d"
 name = "import-export-collection"
-application_url = "https://example.com"
+application_url = "https://collection-manager-updn.onrender.com"
 embedded = true
 
 [build]
@@ -26,7 +26,7 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://collection-manager-ccqi.onrender.com/auth/callback" ]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"

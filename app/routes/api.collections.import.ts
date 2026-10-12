@@ -50,38 +50,99 @@ const COLLECTION_ADD_PRODUCTS_MUTATION = `#graphql
   }
 `;
 
+const VALID_SORT_ORDERS = new Set([
+    "ALPHA_ASC",
+    "ALPHA_DESC",
+    "BEST_SELLING",
+    "CREATED",
+    "CREATED_DESC",
+    "MANUAL",
+    "MOST_RELEVANT",
+    "PRICE_ASC",
+    "PRICE_DESC",
+]);
+
 const buildSmartConditions = (conditions: any[]) => {
     return conditions.map((rule) => {
         const field = String(rule.column ?? rule.field ?? "").toUpperCase()
         const relation = String(rule.relation ?? "").toUpperCase()
-        const value = String(
-            rule.condition
-            ?? (Array.isArray(rule.values) ? rule.values[0] : rule.values)
-            ?? ""
-        ).trim()
+        const values = Array.isArray(rule.values)
+            ? rule.values.map((value: unknown) => String(value).trim()).filter(Boolean)
+            : [String(rule.condition ?? rule.values ?? "").trim()].filter(Boolean)
 
         if (field === "TAG") {
-            let tagRelation: string
+            const tagRelation = relation === "EQUALS"
+                ? "TAGGED_WITH"
+                : relation === "NOT_EQUALS"
+                    ? "NOT_TAGGED_WITH"
+                    : relation
 
-            if (relation === "EQUALS") {
-                tagRelation = 'TAGGED_WITH'
+            if (!["TAGGED_WITH", "NOT_TAGGED_WITH"].includes(tagRelation)) {
+                throw new Error(`Unsupported TAG relation: ${relation}`);
             }
-            else if (relation === "NOT_EQUALS") {
-                tagRelation = "NOT_TAGGES_WITH"
-            }
-            else {
-                throw new Error(`Back Unsupported TAG relation: ${relation}`);
-            }
+
             return {
                 productTag: {
                     relation: tagRelation,
-                    values: [value],
+                    values,
                     matchType: "ANY"
                 }
             }
         }
 
-        throw new Error(`Back Unsupported condition field: ${field}`);
+        const conditionKeyByField: Record<string, string> = {
+            TITLE: "productTitle",
+            TYPE: "productType",
+            VENDOR: "productVendor",
+        };
+        const conditionKey = conditionKeyByField[field];
+
+        if (conditionKey) {
+            const normalizedRelation = relation === "NOT_CONTAINS"
+                ? "DOES_NOT_CONTAIN"
+                : relation;
+            const validRelations = [
+                "CONTAINS",
+                "DOES_NOT_CONTAIN",
+                "ENDS_WITH",
+                "EQUALS",
+                "NOT_EQUALS",
+                "STARTS_WITH",
+            ];
+
+            if (!validRelations.includes(normalizedRelation)) {
+                throw new Error(`Unsupported ${field} relation: ${relation}`);
+            }
+
+            return {
+                [conditionKey]: {
+                    relation: normalizedRelation,
+                    values,
+                    matchType: "ANY",
+                },
+            };
+        }
+
+        if (field === "PRICE") {
+            const amount = String(rule.amount ?? values[0] ?? "").trim();
+            const currencyCode = String(rule.currencyCode ?? "").trim();
+
+            if (!["EQUALS", "GREATER_THAN", "LESS_THAN", "NOT_EQUALS"].includes(relation)) {
+                throw new Error(`Unsupported PRICE relation: ${relation}`);
+            }
+            if (!amount || !currencyCode) {
+                throw new Error("PRICE conditions require an amount and currency code.");
+            }
+
+            return {
+                variantPrice: {
+                    relation,
+                    value: { amount, currencyCode },
+                },
+            };
+        }
+
+        throw new Error(`Unsupported condition field: ${field}`);
     })
 }
 
@@ -117,7 +178,8 @@ export async function action({ request }: ActionFunctionArgs) {
         for (const collection of body.collections) {
 
             let productIds: string[] = [];
-            const isManual = String(collection.type).toLowerCase() === "manual"
+            let missingProductHandles: string[] = [];
+            const isManual = String(collection.type).trim().toLowerCase() === "manual"
 
             const productHandles = Array.isArray(collection.productHandles)
                 ? collection.productHandles
@@ -159,28 +221,34 @@ export async function action({ request }: ActionFunctionArgs) {
 
                 const products = productsResult.data?.products?.nodes ?? [];
 
-                const foundHanldes = new Set(
+                const foundHandles = new Set(
                     products.map((product: { handle: string }) => product.handle.toLowerCase())
                 )
 
-                const missingHandles = normalizedProductHandles.filter((handle: string) => !foundHanldes.has(handle.toLowerCase()))
-
-                if (missingHandles.length > 0) {
-                    results.push({
-                        handle: collection.handle,
-                        status: "failed",
-                        errors: [
-                            {
-                                message: `Products not found: ${missingHandles.join(", ")}`,
-                            },
-                        ],
-                    })
-                    continue
-                }
+                missingProductHandles = normalizedProductHandles.filter(
+                    (handle: string) => !foundHandles.has(handle.toLowerCase())
+                );
 
                 productIds = products.map(
                     (product: { id: string }) => product.id
                 );
+
+                if (missingProductHandles.length > 0) {
+                    console.warn(
+                        `Collection ${collection.handle} has product handles that were not found; creating it with the products that exist.`,
+                        missingProductHandles,
+                    );
+                }
+            }
+
+            const sortOrder = String(collection.sortOrder ?? "").trim().toUpperCase();
+            if (sortOrder && !VALID_SORT_ORDERS.has(sortOrder)) {
+                results.push({
+                    handle: collection.handle,
+                    status: "failed",
+                    errors: [{ message: `Unsupported sort order: ${collection.sortOrder}` }],
+                });
+                continue;
             }
 
             const collectionInput: Record<string, unknown> = {
@@ -189,8 +257,8 @@ export async function action({ request }: ActionFunctionArgs) {
                 descriptionHtml: collection.descriptionHtml || "",
             }
 
-            if (collection.sortOrder) {
-                collectionInput.sortOrder = collection.sortOrder
+            if (sortOrder) {
+                collectionInput.sortOrder = sortOrder
             }
 
             if (collection.templateSuffix) {
@@ -198,13 +266,27 @@ export async function action({ request }: ActionFunctionArgs) {
             }
 
             if (!isManual && Array.isArray(collection.conditions)) {
+                let conditions: ReturnType<typeof buildSmartConditions>;
+                try {
+                    conditions = buildSmartConditions(collection.conditions);
+                } catch (error) {
+                    results.push({
+                        handle: collection.handle,
+                        status: "failed",
+                        errors: [{
+                            message: error instanceof Error ? error.message : String(error),
+                        }],
+                    });
+                    continue;
+                }
+
                 collectionInput.sources = [
                     {
                         source: {
                             title: "Imported smart collection rules",
                             inclusion: {
                                 matchType: String(collection.matchType).toUpperCase() === "ANY" ? "ANY" : "ALL",
-                                conditions: buildSmartConditions(collection.conditions)
+                                conditions
                             }
                         }
                     }
@@ -289,6 +371,9 @@ export async function action({ request }: ActionFunctionArgs) {
                 handle: collection.handle,
                 status: "created",
                 collection: createdCollection,
+                ...(missingProductHandles.length > 0
+                    ? { warnings: [`Products not found and skipped: ${missingProductHandles.join(", ")}`] }
+                    : {}),
             });
         }
 
@@ -298,9 +383,14 @@ export async function action({ request }: ActionFunctionArgs) {
         })
 
     } catch (error) {
+        console.error("COLLECTION IMPORT ERROR:", error);
+
         return Response.json(
-            { error: error instanceof Error ? error.message : "Failed to import collections.", },
-            { status: 500 }
+            {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            },
+            { status: 500 },
         );
     }
 }

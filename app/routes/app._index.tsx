@@ -898,6 +898,7 @@ export default function Index() {
               </s-stack>
               <s-table>
                 <s-table-header-row>
+                  <s-table-header>No</s-table-header>
                   <s-table-header>Select</s-table-header>
                   <s-table-header>Title</s-table-header>
                   <s-table-header>Handle</s-table-header>
@@ -905,8 +906,9 @@ export default function Index() {
                   <s-table-header>Products</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
-                  {collections.map((collection: any) => (
+                  {collections.map((collection: any, index: any) => (
                     <s-table-row key={collection.id}>
+                      <s-table-cell>{index + 1}</s-table-cell>
                       <s-table-cell>
                         <s-checkbox
                           checked={selectedIds.includes(collection.id)}

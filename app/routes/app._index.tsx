@@ -991,14 +991,16 @@ export default function Index() {
                 <s-stack gap="small-100 large-100">
                   <s-table>
                     <s-table-header-row>
+                      <s-table-header>No</s-table-header>
                       <s-table-header>Collection</s-table-header>
                       <s-table-header>Status</s-table-header>
                       <s-table-header>Reason</s-table-header>
                     </s-table-header-row>
 
                     <s-table-body>
-                      {validationResults.map((result) => (
+                      {validationResults.map((result, index) => (
                         <s-table-row key={result.id}>
+                          <s-table-cell>{index + 1}</s-table-cell>
                           <s-table-cell>{result.collection}</s-table-cell>
                           <s-table-cell>{result.status}</s-table-cell>
                           <s-table-cell>{result.reason}</s-table-cell>

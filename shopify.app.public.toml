@@ -2,7 +2,7 @@
 
 client_id = "a027a14b6e847b49736936a3c24889fc"
 name = "Collection Manager Public"
-application_url = "https://collection-manager-updn.onrender.com"
+application_url = "https://collection-manager-public.onrender.com"
 embedded = true
 
 [webhooks]
@@ -15,4 +15,4 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://collection-manager-updn.onrender.com/auth/callback" ]
+redirect_urls = [ "https://collection-manager-public.onrender.com/auth/callback" ]

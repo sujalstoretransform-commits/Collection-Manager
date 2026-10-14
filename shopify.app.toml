@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "a027a14b6e847b49736936a3c24889fc"
-name = "import-export-collection"
+name = "Collection Manager Public"
 application_url = "https://collection-manager-public.onrender.com"
 embedded = true
 

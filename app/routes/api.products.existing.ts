@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
+import { getGraphQLErrors } from "../utils/graphql-errors";
 
 const PRODUCTS_QUERY = `#graphql
   query ProductsByHandles($query: String!, $first: Int!) {
@@ -46,9 +47,10 @@ export async function action({ request }: ActionFunctionArgs) {
 
       const result = await response.json();
 
-      if (result.errors) {
+      const errors = getGraphQLErrors(result);
+      if (errors) {
         throw new Error(
-          result.errors[0]?.message ?? "Shopify API error"
+          errors[0]?.message ?? "Shopify API error"
         );
       }
 

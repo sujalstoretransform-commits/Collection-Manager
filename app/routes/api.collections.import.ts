@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
+import { getGraphQLErrors } from "../utils/graphql-errors";
 
 const COLLECTION_CREATE_MUTATION = `#graphql
     mutation Collectioncreate($collection: CollectionCreateInput!) {
@@ -209,11 +210,12 @@ export async function action({ request }: ActionFunctionArgs) {
 
                 const productsResult = await productsResponse.json();
 
-                if (productsResult.errors) {
+                const productsErrors = getGraphQLErrors(productsResult);
+                if (productsErrors) {
                     results.push({
                         handle: collection.handle,
                         status: "failed",
-                        errors: productsResult.errors,
+                        errors: productsErrors,
                     });
 
                     continue;
@@ -301,11 +303,12 @@ export async function action({ request }: ActionFunctionArgs) {
 
             const result = await response.json()
 
-            if (result.errors) {
+            const collectionErrors = getGraphQLErrors(result);
+            if (collectionErrors) {
                 results.push({
                     handle: collection.handle,
                     status: "failed",
-                    errors: result.errors,
+                    errors: collectionErrors,
                 });
 
                 continue;
@@ -344,11 +347,12 @@ export async function action({ request }: ActionFunctionArgs) {
                 );
                 console.log("PRODUCT IDS:", productIds);
 
-                if (addProductsResult.errors?.length) {
+                const addProductsErrors = getGraphQLErrors(addProductsResult);
+                if (addProductsErrors?.length) {
                     results.push({
                         handle: collection.handle,
                         status: "failed",
-                        errors: addProductsResult.errors,
+                        errors: addProductsErrors,
                     });
                     continue;
                 }

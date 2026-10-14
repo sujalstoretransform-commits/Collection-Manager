@@ -3,6 +3,7 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useEffect, useState, useRef } from "react";
 import { useLoaderData } from "react-router";
+import { getGraphQLErrors } from "../utils/graphql-errors";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -46,10 +47,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const result = await response.json()
 
-  if (result.errors?.length) {
+  const errors = getGraphQLErrors(result);
+  if (errors?.length) {
     console.error(
       "Collections GraphQL errors:",
-      JSON.stringify(result.errors, null, 2),
+      JSON.stringify(errors, null, 2),
     );
     throw new Response("Failed to load collections from Shopify.", {
       status: 500,

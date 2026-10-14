@@ -1,66 +1,50 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { redirect, Form, useActionData, useLoaderData } from "react-router";
-
-import { login } from "../../shopify.server";
-import { loginErrorMessage } from "./error.server";
+import type { LoaderFunctionArgs } from "react-router";
+import { redirect } from "react-router";
 
 import styles from "./styles.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
 
+  // Shopify sends shops through the embedded app route, where the official
+  // authentication flow runs. Keep this redirect and avoid asking merchants
+  // to enter their shop domain manually.
   if (url.searchParams.get("shop")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return { showForm: Boolean(login) };
-};
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const errors = loginErrorMessage(await login(request));
-
-  return { errors };
+  return null;
 };
 
 export default function App() {
-  const { showForm } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const errors = actionData?.errors;
-
   return (
-    <div className={styles.index}>
+    <main className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <p className={styles.eyebrow}>Collection Manager</p>
+        <h1 className={styles.heading}>Move collection data with confidence</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Export your Shopify collections to JSON or CSV, review the file, and
+          import collections into another store.
         </p>
-        {showForm && (
-          <Form className={styles.form} method="post">
-            <label className={styles.label}>
-              <span>Shop domain</span>
-              <input className={styles.input} type="text" name="shop" />
-              <span>{errors?.shop ?? "e.g: my-shop-domain.myshopify.com"}</span>
-            </label>
-            <button className={styles.button} type="submit">
-              Log in
-            </button>
-          </Form>
-        )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Export collections</strong>
+            <span>Download collection details in JSON or CSV format.</span>
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Preview before import</strong>
+            <span>Review collection data and validation results first.</span>
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Import collection rules</strong>
+            <span>Bring in manual collections and supported smart collection conditions.</span>
           </li>
         </ul>
+        <p className={styles.note}>
+          Install the app from Shopify to open Collection Manager inside your
+          admin.
+        </p>
       </div>
-    </div>
+    </main>
   );
 }
